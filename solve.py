@@ -94,8 +94,25 @@ def solve(video_id, video_size):
 
     return best_benefit, best_cache
 
+requestsdensity = {}
 
 for video_id, video_size in enumerate(videos):
+    reqs = 0
+    for endpoint_id in xrange(nendpoints):
+        reqs += requests.get((video_id, endpoint_id), 0)
+    requestsdensity[video_id] = reqs / float(video_size)
+
+sorted_videos = [(requestsdensity[video_id], video_id) for video_id in xrange(nvideos)]
+sorted_videos.sort(reverse=True)
+
+i = 0
+import sys
+
+for _, video_id in sorted_videos:
+    sys.stderr.write('i %d' % i)
+    i += 1
+
+    video_size = videos[video_id]
     #print 'choice', video_id
     benefit, cache_id = solve(video_id, video_size)
     if benefit <= 0: continue
