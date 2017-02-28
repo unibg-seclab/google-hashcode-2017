@@ -1,3 +1,4 @@
+from multiprocessing import Pool
 from collections import defaultdict
 from bisect import insort
 import sys
@@ -44,11 +45,12 @@ assert len(endpoints) == nendpoints
 
 caches = [Cache(cachesize) for _ in xrange(ncaches)]
 
-def solve(video_id, video_size):
-    best_benefit = float('-inf')
-    best_cache = None
+def solve(video_id):
+    video_size = videos[video_id]
     videorequests = requests[video_id]
     videolatencies = current_latencies[video_id]
+    best_benefit = 0
+    best_cache = None
 
     for cache_id, cache in enumerate(caches):
         if video_size > cache.remaining: continue
@@ -58,7 +60,6 @@ def solve(video_id, video_size):
             if cache_id not in endpoint: continue
             nrequest = videorequests[endpoint_id]
             if not nrequest: continue
-            #current_latency = latencies[endpoint_id]    # datacenter -> endpoint
             current_latency = videolatencies[endpoint_id]
             latency = endpoint[cache_id]
 
@@ -80,34 +81,33 @@ for video_id, video_size in enumerate(videos):
     for endpoint_id in xrange(nendpoints):
         reqs += requests[video_id][endpoint_id]
 
-sorted_videos = [(solve(video_id, videos[video_id])[0], video_id) for video_id in xrange(nvideos)]
+video_benefits = Pool(processes=8).map(solve, range(nvideos))
+sorted_videos = [(b[0], video_id) for video_id, b in enumerate(video_benefits)]
 sorted_videos.sort()   # remove from last!
 
 try:
     while sorted_videos:
         _, video_id = sorted_videos.pop()
         video_size = videos[video_id]
-        sys.stderr.write('length %d\n' % len(sorted_videos))
 
         while True:
-            benefit, cache_id = solve(video_id, video_size)
-            sys.stderr.write('length %d benefit %g\n' % (len(sorted_videos), benefit))
+            benefit, cache_id = solve(video_id)
             if benefit <= 0: break
             if len(sorted_videos) > 1 and sorted_videos[-2][0] > benefit:
                 insort(sorted_videos, (benefit, video_id))
                 break
 
+            sys.stderr.write('length %d benefit %d\n' % (len(sorted_videos), benefit))
             cache = caches[cache_id]
             cache.videos.add(video_id)
             cache.remaining -= video_size
 
             for endpoint_id in cache_to_endpoints[cache_id]:
-                #requests[video_id][endpoint_id] = 0
-                current_latencies[video_id][endpoint_id] = min(current_latencies[video_id][endpoint_id],
-                                                               endpoints[endpoint_id][cache_id])
+                current_latencies[video_id][endpoint_id] = \
+                        min(current_latencies[video_id][endpoint_id],
+                            endpoints[endpoint_id][cache_id])
 
-except KeyboardInterrupt:
-    pass
+except KeyboardInterrupt: pass
 
 
 used_caches = sum(1 for cache in caches if cache.videos)
