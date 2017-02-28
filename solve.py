@@ -13,7 +13,7 @@ class Cache:
 
     @property
     def cost(self):
-        return 2 - self.remaining / float(self._capacity)
+        return (2 - self.remaining / float(self._capacity)) ** 1.25
 
 def row(fn):
     return map(fn, raw_input().strip().split())
