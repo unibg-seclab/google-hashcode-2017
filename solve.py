@@ -1,7 +1,7 @@
 from multiprocessing import Pool
-from collections import defaultdict, namedtuple
+from collections import defaultdict
+from itertools import product
 from bisect import insort
-import heapq
 import sys
 
 class Cache:
@@ -11,11 +11,11 @@ class Cache:
         self.remaining = capacity
         self.videos = set()
         self.endpoints = set()
-        self.benefits = defaultdict(int)
+        self.utility = 0
 
     @property
     def cost(self):
-        return 1
+        return self.utility * (2 - self.remaining / float(self._capacity))
 
 def row(fn):
     return map(fn, raw_input().strip().split())
@@ -41,18 +41,22 @@ for endpoint_id in xrange(nendpoints):
 raw_requests = set() # just for last iteration
 requests = [[0 for e in xrange(nendpoints)] for v in xrange(nvideos)]
 for r in xrange(type_requests):
-    if r % 1000 == 0: sys.stderr.write("%.2f\n" % (float(r) / type_requests))
     video_id, endpoint_id, numrequests = row(int)
-    video_size = videos[video_id]
-    #if video_size > cachesize: continue       # skips videos too big to cache
     requests[video_id][endpoint_id] += numrequests
     raw_requests.add((video_id,endpoint_id))
 
     for cache_id, latency_to_cache in endpoints[endpoint_id].iteritems():
         cache = caches[cache_id]
-        request_benefit = (latencies[endpoint_id] - latency_to_cache) * numrequests
-        if request_benefit > 0:
-            cache.benefits[video_id] += request_benefit / float(video_size)
+        cache.utility += max(0, latencies[endpoint_id] - latency_to_cache) * numrequests
+
+# normalize utilities
+min_utility = min(cache.utility for cache in caches)
+max_utility = max(cache.utility for cache in caches)
+delta = float(max_utility - min_utility)
+for cache in caches:
+    if not delta: cache.utility = 1.0
+    else: cache.utility = ((cache.utility - min_utility) / float(delta)) + 1
+    sys.stderr.write('%f\n' % cache.utility)
 
 assert len(videos) == nvideos
 assert len(latencies) == nendpoints
@@ -60,19 +64,14 @@ assert len(endpoints) == nendpoints
 
 current_latencies = [[latencies[eid] for eid in xrange(nendpoints)] for vid in xrange(nvideos)]
 
-for cache_id, cache in enumerate(caches):
-    cache.benefits = sorted((b, vid) for vid, b in cache.benefits.iteritems() if b > 0)
-    requested_size = sum(videos[vid] for b, vid in cache.benefits)
-    if requested_size <= cachesize:
-        cache.videos = [vid for vid, b in cache.benefits]
-        cache.remaining = 0
-
-def solve(video_id, cache_id):
+def solve(args):
+    video_id, cache_id = args
     video_size = videos[video_id]
     videorequests = requests[video_id]
     videolatencies = current_latencies[video_id]
 
-    if video_size > cache.remaining: return 0
+    cache = caches[cache_id]
+    if video_size > cache.remaining: return 0, None, None
     benefit = 0
 
     for endpoint_id, endpoint in enumerate(endpoints):
@@ -86,39 +85,33 @@ def solve(video_id, cache_id):
             # punto da tarare
             benefit += (current_latency - latency) * nrequest
 
-    #overall_benefit_density = benefit / (float(video_size) * caches[cache_id].cost)
-    return benefit / float(video_size)
+    return (benefit / (float(video_size) * caches[cache_id].cost), video_id, cache_id)
 
 
-benefits = [(-b, vid, cid) for cid, cache in enumerate(caches) for b, vid in cache.benefits]
-heapq.heapify(benefits)
-
-for b in benefits: sys.stderr.write("%d\n" % -b[0])
+sorted_videos = Pool(processes=8).map(solve, product(range(nvideos), range(ncaches)))
+sorted_videos.sort()   # remove from last!
 
 try:
+    while sorted_videos:
+        _, video_id, cache_id = sorted_videos.pop()
+        video_size = videos[video_id]
 
-    while benefits:
-        sys.stderr.write("%d\n" % len(benefits))
-        _, video_id, cache_id = heapq.heappop(benefits)
-        benefit = solve(video_id, cache_id)
+        while True:
+            benefit, _, _ = solve((video_id, cache_id))
+            if benefit <= 0: break
+            if len(sorted_videos) > 1 and sorted_videos[-2][0] > benefit:
+                insort(sorted_videos, (benefit, video_id, cache_id))
+                break
 
-        if benefit <= 0: continue
-        second = heapq.heappop(benefits)
-        heapq.heappush(benefits, second)
-        if benefits and -second[0] > benefit:
-            sys.stderr.write('relocate\n')
-            heapq.heappush(benefits, (-benefit, video_id, cache_id))
-            continue
+            sys.stderr.write('length %d benefit %d\n' % (len(sorted_videos), benefit))
+            cache = caches[cache_id]
+            cache.videos.add(video_id)
+            cache.remaining -= video_size
 
-        sys.stderr.write('length %d benefit %d\n' % (len(benefits), benefit))
-        cache = caches[cache_id]
-        cache.videos.add(video_id)
-        cache.remaining -= videos[video_id]
-
-        for endpoint_id in caches[cache_id].endpoints:
-            current_latencies[video_id][endpoint_id] = \
-                    min(current_latencies[video_id][endpoint_id],
-                        endpoints[endpoint_id][cache_id])
+            for endpoint_id in caches[cache_id].endpoints:
+                current_latencies[video_id][endpoint_id] = \
+                        min(current_latencies[video_id][endpoint_id],
+                            endpoints[endpoint_id][cache_id])
 
 except KeyboardInterrupt: pass
 
