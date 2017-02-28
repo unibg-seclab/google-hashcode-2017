@@ -36,12 +36,12 @@ for endpoint_id in xrange(nendpoints):
         caches[cache_id].endpoints.add(endpoint_id)
     endpoints.append(endpoint_latencies)
 
-raw_requests = set() # just for last iteration
+totrequests = 0
 requests = [[0 for e in xrange(nendpoints)] for v in xrange(nvideos)]
 for r in xrange(type_requests):
     video_id, endpoint_id, numrequests = row(int)
     requests[video_id][endpoint_id] += numrequests
-    raw_requests.add((video_id,endpoint_id))
+    totrequests += numrequests
 
     for cache_id, latency_to_cache in endpoints[endpoint_id].iteritems():
         cache = caches[cache_id]
@@ -57,7 +57,7 @@ def solve(video_id):
     video_size = videos[video_id]
     videorequests = requests[video_id]
     videolatencies = current_latencies[video_id]
-    benefit_densities = []
+    benefits = []
 
     for cache_id, cache in enumerate(caches):
         if video_size > cache.remaining: continue
@@ -76,30 +76,37 @@ def solve(video_id):
                 overall_benefit += latency_benefit
 
         overall_benefit_density = overall_benefit / (float(video_size) * caches[cache_id].cost)
-        if overall_benefit: benefit_densities.append((overall_benefit_density, cache_id))
+        if overall_benefit: benefits.append((overall_benefit_density, overall_benefit, cache_id))
 
-    benefit_densities.sort(reverse=True)
-    if not benefit_densities: return 0, None
-    if len(benefit_densities) == 1: return benefit_densities[0]
-    return benefit_densities[0][0] - (0.1 * benefit_densities[1][0]), benefit_densities[0][1]
+    benefits.sort(reverse=True)
+    if not benefits: return 0, 0, None
+    if len(benefits) == 1: return benefits[0]
+    return benefits[0][0] - (0.1 * benefits[1][0]), benefits[0][1], benefits[0][2]
 
 video_benefits = Pool(processes=8).map(solve, range(nvideos))
 sorted_videos = [(b[0], video_id) for video_id, b in enumerate(video_benefits)]
 sorted_videos.sort()   # remove from last!
 
 try:
+    score = 0.0
+    used_size = 0
+    total_size = cachesize * ncaches
     while sorted_videos:
         _, video_id = sorted_videos.pop()
-        video_size = videos[video_id]
 
         while True:
-            benefit, cache_id = solve(video_id)
+            benefit, deltascore, cache_id = solve(video_id)
             if benefit <= 0: break
             if len(sorted_videos) > 1 and sorted_videos[-2][0] > benefit:
                 insort(sorted_videos, (benefit, video_id))
                 break
 
-            sys.stderr.write('length %d benefit %d\n' % (len(sorted_videos), benefit))
+            video_size = videos[video_id]
+            used_size += video_size
+            score += 1000.0 * deltascore / totrequests
+            sys.stderr.write('length %d benefit %d [score: %d, full: %.2f%%]\n' %
+                             (len(sorted_videos), benefit, score, 100.0 * used_size / total_size))
+
             cache = caches[cache_id]
             cache.videos.add(video_id)
             cache.remaining -= video_size
@@ -119,15 +126,4 @@ for cache_id, cache in enumerate(caches):
     if cache.videos:
         print cache_id, ' '.join(map(str, cache.videos))
 
-totrequests = 0
-totsaved = 0
-for video_id, endpoint_id in raw_requests:
-    nrequests = requests[video_id][endpoint_id]
-    if nrequests:
-        original_latency = latencies[endpoint_id]
-        current_latency = current_latencies[video_id][endpoint_id]
-        assert current_latency <= original_latency
-        totrequests += nrequests
-        totsaved += (original_latency - current_latency) * nrequests
-
-sys.stderr.write('score %d\n' % (1000.0 * totsaved / totrequests))
+sys.stderr.write('score: %d, full: %.2f%%\n' % (score, 100.0 * used_size / total_size))
