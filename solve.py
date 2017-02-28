@@ -21,6 +21,17 @@ fp = open(fname)
 def row(fn):
     return map(fn, fp.readline().strip().split())
 
+def reverse_insort(a, x, lo=0, hi=None):
+    if lo < 0:
+        raise ValueError('lo must be non-negative')
+    if hi is None:
+        hi = len(a)
+    while lo < hi:
+        mid = (lo+hi)//2
+        if x > a[mid]: hi = mid
+        else: lo = mid+1
+    a.insert(lo, x)
+
 
 nvideos, nendpoints, type_requests, ncaches, cachesize = row(int)
 videos = row(int)
@@ -109,24 +120,32 @@ for video_id, video_size in enumerate(videos):
         reqs += requests[video_id][endpoint_id]
     requestsdensity[video_id] = reqs / float(video_size)
 
-sorted_videos = [(requestsdensity[video_id], video_id) for video_id in xrange(nvideos)]
+#sorted_videos = [(requestsdensity[video_id], video_id) for video_id in xrange(nvideos)]
+#sorted_videos.sort(reverse=True)
+
+sorted_videos = [(solve(video_id, videos[video_id])[0], video_id) for video_id in xrange(nvideos)]
 sorted_videos.sort(reverse=True)
 
-i = 0
+#i = 0
 import sys
 
 try:
-    for _, video_id in sorted_videos:
+    while sorted_videos:
+        _, video_id = sorted_videos.pop(0)
         video_size = videos[video_id]
-        sys.stderr.write('i %d\n' % i)
-        i += 1
+        sys.stderr.write('length %d\n' % len(sorted_videos))
+        #i += 1
 
-        j = 0
+        #j = 0
         while True:
             benefit, cache_id = solve(video_id, video_size)
             if benefit <= 0: break
-            sys.stderr.write('times %d\n' % j)
-            j += 1
+            if len(sorted_videos) > 1 and sorted_videos[1][0] > benefit:
+                reverse_insort(sorted_videos, (benefit, video_id))
+                break
+
+            #sys.stderr.write('times %d\n' % j)
+            #j += 1
             #print benefit
 
             cache = caches[cache_id]
