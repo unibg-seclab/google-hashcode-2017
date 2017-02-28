@@ -37,11 +37,20 @@ for i in xrange(nendpoints):
         endpoint[cache_id] = latcache
     endpoints.append(endpoint)
 
+from collections import defaultdict
+cache_to_endpoints = defaultdict(set)
+for endpoint_id, endpoint in enumerate(endpoints):
+    for cache_id in endpoint.iterkeys():
+        cache_to_endpoints[cache_id].add(endpoint_id)
+
 requests = [[0 for e in xrange(nendpoints)] for v in xrange(nvideos)]
+
+endpoint_to_videos = defaultdict(set)
 
 for r in xrange(type_requests):
     video_id, endpoint_id, numrequests = row(int)
     requests[video_id][endpoint_id] += numrequests
+    endpoint_to_videos[endpoint_id].add(video_id)
 
 assert len(videos) == nvideos
 assert len(latencies) == nendpoints
@@ -74,9 +83,9 @@ def solve(video_id, video_size):
             if not nrequest: continue
             current_latency = latencies[endpoint_id]    # datacenter -> endpoint
 
-            for connected_cache_id, connected_cache_latency in endpoint.iteritems():
-                if video_id in caches[connected_cache_id].videos:
-                    current_latency = min(current_latency, connected_cache_latency)
+            #for connected_cache_id, connected_cache_latency in endpoint.iteritems():
+            #    if video_id in caches[connected_cache_id].videos:
+            #        current_latency = min(current_latency, connected_cache_latency)
 
             latency = endpoint[cache_id]
 
@@ -124,6 +133,10 @@ try:
             cache.videos.add(video_id)
             cache.remaining -= videos[video_id]
             #print 'cache_id %d, video_id: %d' % (cache_id, video_id)
+
+            for endpoint_id in cache_to_endpoints[cache_id]:
+#                sys.stderr.write('covered %d %d\n' % (endpoint_id, video_id))
+                requests[video_id][endpoint_id] = 0
 
 except KeyboardInterrupt:
     pass
