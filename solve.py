@@ -13,7 +13,6 @@ class Cache:
 #endpoints1 = [{0: 100, 2: 200, 1: 300},
 #             {}]
 #requests1 = {(3, 0): 1500, (0, 1): 1000, (4, 0): 500, (1, 0): 1000}
-#
 
 import sys
 fname = sys.argv[1]
@@ -38,11 +37,11 @@ for i in xrange(nendpoints):
         endpoint[cache_id] = latcache
     endpoints.append(endpoint)
 
-requests = {}
+requests = [[0 for e in xrange(nendpoints)] for v in xrange(nvideos)]
 
 for r in xrange(type_requests):
     video_id, endpoint_id, numrequests = row(int)
-    requests[(video_id, endpoint_id)] = requests.get((video_id, endpoint_id), 0) + numrequests
+    requests[video_id][endpoint_id] += numrequests
 
 assert len(videos) == nvideos
 assert len(latencies) == nendpoints
@@ -63,29 +62,28 @@ caches = [Cache(cachesize) for _ in xrange(ncaches)]
 def solve(video_id, video_size):
     best_benefit = float('-inf')
     best_cache = None
+    videorequests = requests[video_id]
 
     for cache_id, cache in enumerate(caches):
         if video_size > cache.remaining: continue
         overall_benefit = 0
 
         for endpoint_id, endpoint in enumerate(endpoints):
-            try:    # not this video in that endpoint
-                nrequest = requests[(video_id, endpoint_id)]    # the try
-                current_latency = latencies[endpoint_id]    # datacenter -> endpoint
+            if cache_id not in endpoint: continue
+            nrequest = videorequests[endpoint_id]
+            if not nrequest: continue
+            current_latency = latencies[endpoint_id]    # datacenter -> endpoint
 
-                for connected_cache_id, connected_cache_latency in endpoint.iteritems():
-                    if video_id in caches[connected_cache_id].videos:
-                        current_latency = min(current_latency, connected_cache_latency)
+            for connected_cache_id, connected_cache_latency in endpoint.iteritems():
+                if video_id in caches[connected_cache_id].videos:
+                    current_latency = min(current_latency, connected_cache_latency)
 
-                latency = endpoint[cache_id]
+            latency = endpoint[cache_id]
 
-                if latency < current_latency:
-                    # punto da tarare
-                    latency_benefit = (current_latency - latency) * nrequest
-                    overall_benefit += latency_benefit
-
-            except KeyError:
-                pass
+            if latency < current_latency:
+                # punto da tarare
+                latency_benefit = (current_latency - latency) * nrequest
+                overall_benefit += latency_benefit
 
         overall_benefit_density = overall_benefit / float(video_size)
         if overall_benefit_density > best_benefit:
@@ -99,7 +97,7 @@ requestsdensity = {}
 for video_id, video_size in enumerate(videos):
     reqs = 0
     for endpoint_id in xrange(nendpoints):
-        reqs += requests.get((video_id, endpoint_id), 0)
+        reqs += requests[video_id][endpoint_id]
     requestsdensity[video_id] = reqs / float(video_size)
 
 sorted_videos = [(requestsdensity[video_id], video_id) for video_id in xrange(nvideos)]
