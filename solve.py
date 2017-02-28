@@ -93,7 +93,7 @@ try:
             benefit, cache_id = solve(video_id, video_size)
             sys.stderr.write('length %d benefit %g\n' % (len(sorted_videos), benefit))
             if benefit <= 0: break
-            if len(sorted_videos) > 1 and sorted_videos[-2][0] > benefit:
+            if sorted_videos and sorted_videos[-1][0] > benefit:
                 insort(sorted_videos, (benefit, video_id))
                 break
 
