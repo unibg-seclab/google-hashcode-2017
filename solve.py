@@ -6,44 +6,67 @@ import sys
 class Cache:
 
     def __init__(self, capacity):
+        self._capacity = capacity
         self.remaining = capacity
         self.videos = set()
+        self.endpoints = set()
+        self.utility = 0
+
+    @property
+    def cost(self):
+        return self.utility * (2 - self.remaining / float(self._capacity))
 
 def row(fn):
     return map(fn, raw_input().strip().split())
 
 nvideos, nendpoints, type_requests, ncaches, cachesize = row(int)
 videos = row(int)
+
 endpoints = []
-
 latencies = []
-for i in xrange(nendpoints):
-    endpoint = {}
-    latency, ncaches_e = row(int)
-    latencies.append(latency)
+caches = [Cache(cachesize) for _ in xrange(ncaches)]
 
-    for y in xrange(0, ncaches_e):
-        cache_id, latcache = row(int)
-        endpoint[cache_id] = latcache
-    endpoints.append(endpoint)
+for endpoint_id in xrange(nendpoints):
+    endpoint_latencies = {}
+    latency_to_datacenter, connected_caches = row(int)
+    latencies.append(latency_to_datacenter)
 
-cache_to_endpoints = defaultdict(set)
-for endpoint_id, endpoint in enumerate(endpoints):
-    for cache_id in endpoint.iterkeys():
-        cache_to_endpoints[cache_id].add(endpoint_id)
+    for y in xrange(connected_caches):
+        cache_id, latency_to_cache = row(int)
+        endpoint_latencies[cache_id] = latency_to_cache
+        caches[cache_id].endpoints.add(endpoint_id)
+    endpoints.append(endpoint_latencies)
 
+raw_requests = set() # just for last iteration
 requests = [[0 for e in xrange(nendpoints)] for v in xrange(nvideos)]
-current_latencies = [[latencies[eid] for eid in xrange(nendpoints)] for vid in xrange(nvideos)]
-
 for r in xrange(type_requests):
     video_id, endpoint_id, numrequests = row(int)
     requests[video_id][endpoint_id] += numrequests
+    raw_requests.add((video_id,endpoint_id))
+
+    for cache_id, latency_to_cache in endpoints[endpoint_id].iteritems():
+        cache = caches[cache_id]
+        cache.utility += max(0, latencies[endpoint_id] - latency_to_cache) * numrequests
+
+# normalize utilities
+min_utility = min(cache.utility for cache in caches)
+max_utility = max(cache.utility for cache in caches)
+delta = float(max_utility - min_utility)
+for cache in caches:
+    if not delta: cache.utility = 1.0
+    else: cache.utility = ((cache.utility - min_utility) / float(delta)) + 1
+    sys.stderr.write('%f\n' % cache.utility)
+
+import time
+time.sleep(1)
+
 
 assert len(videos) == nvideos
 assert len(latencies) == nendpoints
 assert len(endpoints) == nendpoints
 
-caches = [Cache(cachesize) for _ in xrange(ncaches)]
+current_latencies = [[latencies[eid] for eid in xrange(nendpoints)] for vid in xrange(nvideos)]
+
 
 def solve(video_id):
     video_size = videos[video_id]
@@ -68,7 +91,7 @@ def solve(video_id):
                 latency_benefit = (current_latency - latency) * nrequest
                 overall_benefit += latency_benefit
 
-        overall_benefit_density = overall_benefit / float(video_size)
+        overall_benefit_density = overall_benefit / (float(video_size) * caches[cache_id].cost)
         if overall_benefit_density > best_benefit:
             best_benefit = overall_benefit_density
             best_cache = cache_id
@@ -102,7 +125,7 @@ try:
             cache.videos.add(video_id)
             cache.remaining -= video_size
 
-            for endpoint_id in cache_to_endpoints[cache_id]:
+            for endpoint_id in caches[cache_id].endpoints:
                 current_latencies[video_id][endpoint_id] = \
                         min(current_latencies[video_id][endpoint_id],
                             endpoints[endpoint_id][cache_id])
@@ -116,3 +139,16 @@ print used_caches
 for cache_id, cache in enumerate(caches):
     if cache.videos:
         print cache_id, ' '.join(map(str, cache.videos))
+
+totrequests = 0
+totsaved = 0
+for video_id, endpoint_id in raw_requests:
+    nrequests = requests[video_id][endpoint_id]
+    if nrequests:
+        original_latency = latencies[endpoint_id]
+        current_latency = current_latencies[video_id][endpoint_id]
+        assert current_latency <= original_latency
+        totrequests += nrequests
+        totsaved += (original_latency - current_latency) * nrequests
+
+sys.stderr.write('score %d\n' % (1000.0 * totsaved / totrequests))
