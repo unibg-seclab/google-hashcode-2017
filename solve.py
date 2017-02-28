@@ -60,48 +60,45 @@ assert len(endpoints) == nendpoints
 # 
 caches = [Cache(cachesize) for _ in xrange(ncaches)]
 
-def solve():
+def solve(video_id, video_size):
     best_benefit = float('-inf')
-    best_video = None
     best_cache = None
 
-    for video_id, video_size in enumerate(videos):
+    for cache_id, cache in enumerate(caches):
+        if video_size > cache.remaining: continue
+        overall_benefit = 0
 
-        for cache_id, cache in enumerate(caches):
-            if video_size > cache.remaining: continue
-            overall_benefit = 0
+        for endpoint_id, endpoint in enumerate(endpoints):
+            try:    # not this video in that endpoint
+                nrequest = requests[(video_id, endpoint_id)]    # the try
+                current_latency = latencies[endpoint_id]    # datacenter -> endpoint
 
-            for endpoint_id, endpoint in enumerate(endpoints):
-                try:    # not this video in that endpoint
-                    nrequest = requests[(video_id, endpoint_id)]    # the try
-                    current_latency = latencies[endpoint_id]    # datacenter -> endpoint
+                for connected_cache_id, connected_cache_latency in endpoint.iteritems():
+                    if video_id in caches[connected_cache_id].videos:
+                        current_latency = min(current_latency, connected_cache_latency)
 
-                    for connected_cache_id, connected_cache_latency in endpoint.iteritems():
-                        if video_id in caches[connected_cache_id].videos:
-                            current_latency = min(current_latency, connected_cache_latency)
+                latency = endpoint[cache_id]
 
-                    latency = endpoint[cache_id]
+                if latency < current_latency:
+                    # punto da tarare
+                    latency_benefit = (current_latency - latency) * nrequest
+                    overall_benefit += latency_benefit
 
-                    if latency < current_latency:
-                        # punto da tarare
-                        latency_benefit = (current_latency - latency) * nrequest
-                        overall_benefit += latency_benefit
+            except KeyError:
+                pass
 
-                except KeyError:
-                    pass
+        overall_benefit_density = overall_benefit / float(video_size)
+        if overall_benefit_density > best_benefit:
+            best_benefit = overall_benefit_density
+            best_cache = cache_id
 
-            overall_benefit_density = overall_benefit / float(video_size)
-            if overall_benefit_density > best_benefit:
-                best_benefit = overall_benefit_density
-                best_cache = cache_id
-                best_video = video_id
-
-    return best_benefit, best_cache, best_video
+    return best_benefit, best_cache
 
 
-while True:
-    benefit, cache_id, video_id = solve()
-    if benefit <= 0: break
+for video_id, video_size in enumerate(videos):
+    #print 'choice', video_id
+    benefit, cache_id = solve(video_id, video_size)
+    if benefit <= 0: continue
     #print benefit
 
     cache = caches[cache_id]
