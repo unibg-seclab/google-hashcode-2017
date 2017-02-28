@@ -57,8 +57,7 @@ def solve(video_id):
     video_size = videos[video_id]
     videorequests = requests[video_id]
     videolatencies = current_latencies[video_id]
-    best_benefit = 0
-    best_cache = None
+    benefit_densities = []
 
     for cache_id, cache in enumerate(caches):
         if video_size > cache.remaining: continue
@@ -77,17 +76,12 @@ def solve(video_id):
                 overall_benefit += latency_benefit
 
         overall_benefit_density = overall_benefit / (float(video_size) * caches[cache_id].cost)
-        if overall_benefit_density > best_benefit:
-            best_benefit = overall_benefit_density
-            best_cache = cache_id
+        if overall_benefit: benefit_densities.append((overall_benefit_density, cache_id))
 
-    return best_benefit, best_cache
-
-
-for video_id, video_size in enumerate(videos):
-    reqs = 0
-    for endpoint_id in xrange(nendpoints):
-        reqs += requests[video_id][endpoint_id]
+    benefit_densities.sort(reverse=True)
+    if not benefit_densities: return 0, None
+    if len(benefit_densities) == 1: return benefit_densities[0]
+    return benefit_densities[0][0] - (0.1 * benefit_densities[1][0]), benefit_densities[0][1]
 
 video_benefits = Pool(processes=8).map(solve, range(nvideos))
 sorted_videos = [(b[0], video_id) for video_id, b in enumerate(video_benefits)]
