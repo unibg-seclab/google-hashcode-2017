@@ -3,18 +3,28 @@ from collections import defaultdict
 from bisect import insort
 import sys
 
+x_a, x_b = 9, 1
+
 class Cache:
 
     def __init__(self, capacity):
         self._capacity = capacity
-        self.remaining = capacity
+        self.__remaining = capacity
         self.videos = set()
         self.endpoints = set()
         self.utility = 0
+        self.cost = 1.0
 
-    @property
-    def cost(self):
-        return self.utility * (2 - self.remaining / float(self._capacity))
+    def refresh_cost(self):
+        self.cost = self.utility * (x_a - x_b * self.__remaining / float(self._capacity))
+
+    def getremaining(self):
+        return self.__remaining
+
+    def setremaining(self, remaining):
+        self.__remaining = remaining
+        self.refresh_cost()
+
 
 def row(fn):
     return map(fn, raw_input().strip().split())
@@ -53,8 +63,9 @@ min_utility = min(cache.utility for cache in caches)
 max_utility = max(cache.utility for cache in caches)
 delta = float(max_utility - min_utility)
 for cache in caches:
-    if not delta: cache.utility = 1.0
+    if not delta or (max_utility < 2 * min_utility): cache.utility = 1.0
     else: cache.utility = ((cache.utility - min_utility) / float(delta)) + 1
+    cache.refresh_cost()
     sys.stderr.write('%f\n' % cache.utility)
 
 import time
@@ -76,7 +87,7 @@ def solve(video_id):
     best_cache = None
 
     for cache_id, cache in enumerate(caches):
-        if video_size > cache.remaining: continue
+        if video_size > cache.getremaining(): continue
         overall_benefit = 0
 
         for endpoint_id, endpoint in enumerate(endpoints):
@@ -123,7 +134,7 @@ try:
             sys.stderr.write('length %d benefit %d\n' % (len(sorted_videos), benefit))
             cache = caches[cache_id]
             cache.videos.add(video_id)
-            cache.remaining -= video_size
+            cache.setremaining(cache.getremaining() - video_size)
 
             for endpoint_id in caches[cache_id].endpoints:
                 current_latencies[video_id][endpoint_id] = \
