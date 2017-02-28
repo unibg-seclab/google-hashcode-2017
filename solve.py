@@ -108,20 +108,28 @@ sorted_videos.sort(reverse=True)
 i = 0
 import sys
 
-for _, video_id in sorted_videos:
-    sys.stderr.write('i %d' % i)
-    i += 1
+try:
+    for _, video_id in sorted_videos:
+        video_size = videos[video_id]
+        sys.stderr.write('i %d\n' % i)
+        i += 1
 
-    video_size = videos[video_id]
-    #print 'choice', video_id
-    benefit, cache_id = solve(video_id, video_size)
-    if benefit <= 0: continue
-    #print benefit
+        j = 0
+        while True:
+            benefit, cache_id = solve(video_id, video_size)
+            if benefit <= 0: break
+            sys.stderr.write('times %d\n' % j)
+            j += 1
+            #print benefit
 
-    cache = caches[cache_id]
-    cache.videos.add(video_id)
-    cache.remaining -= videos[video_id]
-    #print 'cache_id %d, video_id: %d' % (cache_id, video_id)
+            cache = caches[cache_id]
+            cache.videos.add(video_id)
+            cache.remaining -= videos[video_id]
+            #print 'cache_id %d, video_id: %d' % (cache_id, video_id)
+
+except KeyboardInterrupt:
+    pass
+
 
 used_caches = sum(1 for cache in caches if cache.videos)
 print used_caches
