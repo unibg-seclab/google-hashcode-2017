@@ -1,4 +1,6 @@
-#from tqdm import tqdm
+from collections import defaultdict
+from bisect import insort
+import sys
 
 class Cache:
 
@@ -6,32 +8,8 @@ class Cache:
         self.remaining = capacity
         self.videos = set()
 
-#nvideos, nendpoints, nrequests, ncaches, cachesize = 5, 2, 4, 3, 100
-#videos1 = [50, 50, 80, 30, 110]
-## 
-#latencies1 = [1000, 500]
-#endpoints1 = [{0: 100, 2: 200, 1: 300},
-#             {}]
-#requests1 = {(3, 0): 1500, (0, 1): 1000, (4, 0): 500, (1, 0): 1000}
-
-import sys
-fname = sys.argv[1]
-fp = open(fname)
-
 def row(fn):
-    return map(fn, fp.readline().strip().split())
-
-def reverse_insort(a, x, lo=0, hi=None):
-    if lo < 0:
-        raise ValueError('lo must be non-negative')
-    if hi is None:
-        hi = len(a)
-    while lo < hi:
-        mid = (lo+hi)//2
-        if x > a[mid]: hi = mid
-        else: lo = mid+1
-    a.insert(lo, x)
-
+    return map(fn, raw_input().strip().split())
 
 nvideos, nendpoints, type_requests, ncaches, cachesize = row(int)
 videos = row(int)
@@ -48,41 +26,29 @@ for i in xrange(nendpoints):
         endpoint[cache_id] = latcache
     endpoints.append(endpoint)
 
-from collections import defaultdict
 cache_to_endpoints = defaultdict(set)
 for endpoint_id, endpoint in enumerate(endpoints):
     for cache_id in endpoint.iterkeys():
         cache_to_endpoints[cache_id].add(endpoint_id)
 
 requests = [[0 for e in xrange(nendpoints)] for v in xrange(nvideos)]
-
-endpoint_to_videos = defaultdict(set)
+current_latencies = [[latencies[eid] for eid in xrange(nendpoints)] for vid in xrange(nvideos)]
 
 for r in xrange(type_requests):
     video_id, endpoint_id, numrequests = row(int)
     requests[video_id][endpoint_id] += numrequests
-    endpoint_to_videos[endpoint_id].add(video_id)
 
 assert len(videos) == nvideos
 assert len(latencies) == nendpoints
 assert len(endpoints) == nendpoints
-#assert len(requests) == type_requests
-# 
-# print latencies
-# print endpoints
-# print requests
-# 
-# assert latencies == latencies1
-# assert endpoints == endpoints1
-# assert requests == requests1
-# assert videos == videos1
-# 
+
 caches = [Cache(cachesize) for _ in xrange(ncaches)]
 
 def solve(video_id, video_size):
     best_benefit = float('-inf')
     best_cache = None
     videorequests = requests[video_id]
+    videolatencies = current_latencies[video_id]
 
     for cache_id, cache in enumerate(caches):
         if video_size > cache.remaining: continue
@@ -92,12 +58,8 @@ def solve(video_id, video_size):
             if cache_id not in endpoint: continue
             nrequest = videorequests[endpoint_id]
             if not nrequest: continue
-            current_latency = latencies[endpoint_id]    # datacenter -> endpoint
-
-            #for connected_cache_id, connected_cache_latency in endpoint.iteritems():
-            #    if video_id in caches[connected_cache_id].videos:
-            #        current_latency = min(current_latency, connected_cache_latency)
-
+            #current_latency = latencies[endpoint_id]    # datacenter -> endpoint
+            current_latency = videolatencies[endpoint_id]
             latency = endpoint[cache_id]
 
             if latency < current_latency:
@@ -112,50 +74,37 @@ def solve(video_id, video_size):
 
     return best_benefit, best_cache
 
-requestsdensity = {}
 
 for video_id, video_size in enumerate(videos):
     reqs = 0
     for endpoint_id in xrange(nendpoints):
         reqs += requests[video_id][endpoint_id]
-    requestsdensity[video_id] = reqs / float(video_size)
-
-#sorted_videos = [(requestsdensity[video_id], video_id) for video_id in xrange(nvideos)]
-#sorted_videos.sort(reverse=True)
 
 sorted_videos = [(solve(video_id, videos[video_id])[0], video_id) for video_id in xrange(nvideos)]
-sorted_videos.sort(reverse=True)
-
-#i = 0
-import sys
+sorted_videos.sort()   # remove from last!
 
 try:
     while sorted_videos:
-        _, video_id = sorted_videos.pop(0)
+        _, video_id = sorted_videos.pop()
         video_size = videos[video_id]
         sys.stderr.write('length %d\n' % len(sorted_videos))
-        #i += 1
 
-        #j = 0
         while True:
             benefit, cache_id = solve(video_id, video_size)
+            sys.stderr.write('length %d benefit %g\n' % (len(sorted_videos), benefit))
             if benefit <= 0: break
-            if len(sorted_videos) > 1 and sorted_videos[1][0] > benefit:
-                reverse_insort(sorted_videos, (benefit, video_id))
+            if len(sorted_videos) > 1 and sorted_videos[-2][0] > benefit:
+                insort(sorted_videos, (benefit, video_id))
                 break
-
-            #sys.stderr.write('times %d\n' % j)
-            #j += 1
-            #print benefit
 
             cache = caches[cache_id]
             cache.videos.add(video_id)
-            cache.remaining -= videos[video_id]
-            #print 'cache_id %d, video_id: %d' % (cache_id, video_id)
+            cache.remaining -= video_size
 
             for endpoint_id in cache_to_endpoints[cache_id]:
-#                sys.stderr.write('covered %d %d\n' % (endpoint_id, video_id))
-                requests[video_id][endpoint_id] = 0
+                #requests[video_id][endpoint_id] = 0
+                current_latencies[video_id][endpoint_id] = min(current_latencies[video_id][endpoint_id],
+                                                               endpoints[endpoint_id][cache_id])
 
 except KeyboardInterrupt:
     pass
@@ -167,4 +116,3 @@ print used_caches
 for cache_id, cache in enumerate(caches):
     if cache.videos:
         print cache_id, ' '.join(map(str, cache.videos))
-
