@@ -1,18 +1,63 @@
+#from tqdm import tqdm
+
 class Cache:
 
     def __init__(self, capacity):
         self.remaining = capacity
         self.videos = set()
 
-nvideos, nendpoints, nrequests, ncaches, cachesize = 5, 2, 4, 3, 100
-videos = [50, 50, 80, 30, 110]
+#nvideos, nendpoints, nrequests, ncaches, cachesize = 5, 2, 4, 3, 100
+#videos1 = [50, 50, 80, 30, 110]
+## 
+#latencies1 = [1000, 500]
+#endpoints1 = [{0: 100, 2: 200, 1: 300},
+#             {}]
+#requests1 = {(3, 0): 1500, (0, 1): 1000, (4, 0): 500, (1, 0): 1000}
+#
 
-latencies = [1000, 500]
-endpoints = [{0: 100, 2: 200, 1: 300},
-             {}]
+import sys
+fname = sys.argv[1]
+fp = open(fname)
 
-requests = {(3, 0): 1500, (0, 1): 1000, (4, 0): 500, (1, 0): 1000}
+def row(fn):
+    return map(fn, fp.readline().strip().split())
 
+
+nvideos, nendpoints, type_requests, ncaches, cachesize = row(int)
+videos = row(int)
+endpoints = []
+
+latencies = []
+for i in xrange(nendpoints):
+    endpoint = {}
+    latency, ncaches_e = row(int)
+    latencies.append(latency)
+
+    for y in xrange(0, ncaches_e):
+        cache_id, latcache = row(int)
+        endpoint[cache_id] = latcache
+    endpoints.append(endpoint)
+
+requests = {}
+
+for r in xrange(type_requests):
+    video_id, endpoint_id, numrequests = row(int)
+    requests[(video_id, endpoint_id)] = requests.get((video_id, endpoint_id), 0) + numrequests
+
+assert len(videos) == nvideos
+assert len(latencies) == nendpoints
+assert len(endpoints) == nendpoints
+#assert len(requests) == type_requests
+# 
+# print latencies
+# print endpoints
+# print requests
+# 
+# assert latencies == latencies1
+# assert endpoints == endpoints1
+# assert requests == requests1
+# assert videos == videos1
+# 
 caches = [Cache(cachesize) for _ in xrange(ncaches)]
 
 def solve():
@@ -56,7 +101,7 @@ def solve():
 
 while True:
     benefit, cache_id, video_id = solve()
-    if benefit == 0: break
+    if benefit <= 0: break
     #print benefit
 
     cache = caches[cache_id]
@@ -70,3 +115,4 @@ print used_caches
 for cache_id, cache in enumerate(caches):
     if cache.videos:
         print cache_id, ' '.join(map(str, cache.videos))
+
