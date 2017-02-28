@@ -11,11 +11,10 @@ class Cache:
         self.remaining = capacity
         self.videos = set()
         self.endpoints = set()
-        self.utility = 0
 
     @property
     def cost(self):
-        return self.utility * (2 - self.remaining / float(self._capacity))
+        return (2 - self.remaining / float(self._capacity)) ** 1.25
 
 def row(fn):
     return map(fn, raw_input().strip().split())
@@ -47,16 +46,6 @@ for r in xrange(type_requests):
 
     for cache_id, latency_to_cache in endpoints[endpoint_id].iteritems():
         cache = caches[cache_id]
-        cache.utility += max(0, latencies[endpoint_id] - latency_to_cache) * numrequests
-
-# normalize utilities
-min_utility = min(cache.utility for cache in caches)
-max_utility = max(cache.utility for cache in caches)
-delta = float(max_utility - min_utility)
-for cache in caches:
-    if not delta: cache.utility = 1.0
-    else: cache.utility = ((cache.utility - min_utility) / float(delta)) + 1
-    sys.stderr.write('%f\n' % cache.utility)
 
 assert len(videos) == nvideos
 assert len(latencies) == nendpoints
