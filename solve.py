@@ -1,7 +1,19 @@
 from multiprocessing import Pool
 from collections import defaultdict
 from bisect import insort
+import random
 import sys
+import os
+
+# initialize random seed
+if len(sys.argv) > 1:
+    seed = int(sys.argv[1])
+else:
+    seed = long(os.urandom(8).encode('hex'), 16)
+    sys.stderr.write('%s\n' % seed)
+
+random.seed(seed)
+maxrand = random.random()
 
 class Cache:
 
@@ -116,11 +128,14 @@ def solve(cache_id):
 #    solvebenefit += theoretical_available_benefit_density * available
 #    solvebenefit = solvebenefit / ((1+available) ** 0.1)
 
-    chosen_size = sum(videos[vid] for b, vid in chosen)
-    avg_benefit = sum(b * videos[vid] for b, vid in chosen[:-1]) / float(chosen_size)
-    if avg_benefit: benefit = benefit * (benefit / avg_benefit)
-    else: benefit = benefit * 10
+    if len(chosen) > 1:
+        chosen_size = sum(videos[vid] for b, vid in chosen)
+        avg_benefit = sum(b * videos[vid] for b, vid in chosen) / float(chosen_size)
+        benefit *= (benefit / avg_benefit)
+    else:
+        benefit *= 10
 
+    benefit *= (1 + random.random() * maxrand)
     result = (benefit, deltascore, video_id)
     benefits.extend(chosen)
     return result
