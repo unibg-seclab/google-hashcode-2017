@@ -52,40 +52,57 @@ assert len(endpoints) == nendpoints
 
 current_latencies = [[latencies[eid] for eid in xrange(nendpoints)] for vid in xrange(nvideos)]
 
+def solve_specific(cache_id, video_id):
+    cache = caches[cache_id]
+    video_size = videos[video_id]
+    videorequests = requests[video_id]
+    videolatencies = current_latencies[video_id]
+    if video_size > cache.remaining: return 0, 0
+    benefit = 0
+
+    for endpoint_id, endpoint in enumerate(endpoints):
+        if cache_id not in endpoint: continue
+        nrequest = videorequests[endpoint_id]
+        if not nrequest: continue
+        current_latency = videolatencies[endpoint_id]
+        latency = endpoint[cache_id]
+
+        if latency < current_latency:
+            # punto da tarare
+            benefit += (current_latency - latency) * nrequest
+
+    benefit_density = benefit / (float(video_size) * cache.cost)
+    return benefit_density, benefit
+
+def compute_cache_benefits(cache_id):
+    video_solutions = [solve_specific(cache_id, video_id) for video_id in xrange(nvideos)]
+    video_benefits = [(b[0], video_id) for video_id, b in enumerate(video_solutions)]
+    video_benefits.sort() # remove from last!                       # TODO WHATCHOOOOUT! look here for errors!
+    return video_benefits
+
+#recompute_sets = defaultdict(set)
+cache_benefits = Pool().map(compute_cache_benefits, range(ncaches))
+sorted_caches = [(benefits[-1][0], cache_id) for cache_id, benefits in enumerate(cache_benefits)]
+sorted_caches.sort()   # remove from last!
 
 def solve(cache_id):
-    benefits = []
     cache = caches[cache_id]
+    benefits = cache_benefits[cache_id]
+#    recompute_set = recompute_sets[cache_id]
 
-    for video_id, video_size in enumerate(videos):
-        videorequests = requests[video_id]
-        videolatencies = current_latencies[video_id]
-        if video_size > cache.remaining: continue
-        overall_benefit = 0
+    while benefits:
+        benefit, video_id = benefits.pop()
+#        if video_id not in recompute_set: break
+#        recompute_set.remove(video_id)
+        benefit, deltascore = solve_specific(cache_id, video_id)
+        if benefit <= 0: continue
+        if benefits and benefits[-1][0] > benefit:
+            insort(benefits, (benefit, video_id))
+        else:
+            if not benefits: return benefit, deltascore, video_id
+            else: return benefit - (0.1 * benefits[-1][0]), deltascore, video_id
 
-        for endpoint_id, endpoint in enumerate(endpoints):
-            if cache_id not in endpoint: continue
-            nrequest = videorequests[endpoint_id]
-            if not nrequest: continue
-            current_latency = videolatencies[endpoint_id]
-            latency = endpoint[cache_id]
-
-            if latency < current_latency:
-                # punto da tarare
-                latency_benefit = (current_latency - latency) * nrequest
-                overall_benefit += latency_benefit
-
-        overall_benefit_density = overall_benefit / (float(video_size) * cache.cost)
-        if overall_benefit: benefits.append((overall_benefit_density, overall_benefit, video_id))
-
-    benefits.sort(reverse=True)
-    if not benefits: return 0, 0, None
-    if len(benefits) == 1: return benefits[0]
-    return benefits[0][0] - (0.1 * benefits[1][0]), benefits[0][1], benefits[0][2]
-
-cache_benefits = Pool(processes=8).map(solve, range(ncaches))
-sorted_caches = [(b[0], cache_id) for cache_id, b in enumerate(cache_benefits)]
-sorted_caches.sort()   # remove from last!
+    return 0, 0, None # no break (no more benefits)
 
 try:
     score = 0.0
@@ -97,8 +114,9 @@ try:
         while True:
             benefit, deltascore, video_id = solve(cache_id)
             if benefit <= 0: break
-            if len(sorted_caches) > 1 and sorted_caches[-2][0] > benefit:
+            if sorted_caches and sorted_caches[-1][0] > benefit:
                 insort(sorted_caches, (benefit, cache_id))
+                insort(cache_benefits[cache_id], (benefit, video_id))
                 break
 
             video_size = videos[video_id]
