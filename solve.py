@@ -68,10 +68,10 @@ def solve_specific(cache_id, video_id):
         latency = endpoint[cache_id]
 
         if latency < current_latency:
-            # punto da tarare
             benefit += (current_latency - latency) * nrequest
 
     benefit_density = benefit / (float(video_size) * cache.cost)
+#    benefit_density = benefit / float(video_size)
     return benefit_density, benefit
 
 def compute_cache_benefits(cache_id):
@@ -81,24 +81,52 @@ def compute_cache_benefits(cache_id):
     return video_benefits
 
 cache_benefits = Pool().map(compute_cache_benefits, range(ncaches))
-sorted_caches = [(benefits[-1][0], cache_id) for cache_id, benefits in enumerate(cache_benefits)]
-sorted_caches.sort()   # remove from last!
 
 def solve(cache_id):
     cache = caches[cache_id]
     benefits = cache_benefits[cache_id]
+    available = cache.remaining
+    tot_deltascore = 0
+    theoretical_available_benefit_density = 0
+    chosen = []
 
     while benefits:
         benefit, video_id = benefits.pop()
+        if video_id in cache.videos: continue
         benefit, deltascore = solve_specific(cache_id, video_id)
         if benefit <= 0: continue
         if benefits and benefits[-1][0] > benefit:
             insort(benefits, (benefit, video_id))
         else:
-            if not benefits: return benefit, deltascore, video_id
-            else: return benefit - (0.1 * benefits[-1][0]), deltascore, video_id
+            chosen.insert(0, (benefit, video_id))
+            video_size = videos[video_id]
+            if video_size <= available:
+                available -= video_size
+                tot_deltascore += deltascore
+            else:
+                theoretical_available_benefit_density = benefit
+                break
 
-    return 0, 0, None # no break (no more benefits)
+    if not chosen: return 0, 0, None
+
+    video_id = chosen[-1][1]
+    benefit, deltascore = solve_specific(cache_id, video_id)
+
+#    solvebenefit = sum(b * videos[vid] for b, vid in chosen)
+#    solvebenefit += theoretical_available_benefit_density * available
+#    solvebenefit = solvebenefit / ((1+available) ** 0.1)
+
+    chosen_size = sum(videos[vid] for b, vid in chosen)
+    avg_benefit = sum(b * videos[vid] for b, vid in chosen[:-1]) / float(chosen_size)
+    if avg_benefit: benefit = benefit * (benefit / avg_benefit)
+    else: benefit = benefit * 10
+
+    result = (benefit, deltascore, video_id)
+    benefits.extend(chosen)
+    return result
+
+sorted_caches = [(solve(cache_id)[0], cache_id) for cache_id in xrange(ncaches)]
+sorted_caches.sort()   # remove from last!
 
 try:
     score = 0.0
@@ -112,7 +140,6 @@ try:
             if benefit <= 0: break
             if sorted_caches and sorted_caches[-1][0] > benefit:
                 insort(sorted_caches, (benefit, cache_id))
-                insort(cache_benefits[cache_id], (benefit, video_id))
                 break
 
             video_size = videos[video_id]
