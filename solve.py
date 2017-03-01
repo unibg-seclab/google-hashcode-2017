@@ -77,10 +77,9 @@ def solve_specific(cache_id, video_id):
 def compute_cache_benefits(cache_id):
     video_solutions = [solve_specific(cache_id, video_id) for video_id in xrange(nvideos)]
     video_benefits = [(b[0], video_id) for video_id, b in enumerate(video_solutions)]
-    video_benefits.sort() # remove from last!                       # TODO WHATCHOOOOUT! look here for errors!
+    video_benefits.sort() # remove from last!
     return video_benefits
 
-#recompute_sets = defaultdict(set)
 cache_benefits = Pool().map(compute_cache_benefits, range(ncaches))
 sorted_caches = [(benefits[-1][0], cache_id) for cache_id, benefits in enumerate(cache_benefits)]
 sorted_caches.sort()   # remove from last!
@@ -88,12 +87,9 @@ sorted_caches.sort()   # remove from last!
 def solve(cache_id):
     cache = caches[cache_id]
     benefits = cache_benefits[cache_id]
-#    recompute_set = recompute_sets[cache_id]
 
     while benefits:
         benefit, video_id = benefits.pop()
-#        if video_id not in recompute_set: break
-#        recompute_set.remove(video_id)
         benefit, deltascore = solve_specific(cache_id, video_id)
         if benefit <= 0: continue
         if benefits and benefits[-1][0] > benefit:
