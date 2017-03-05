@@ -7,9 +7,8 @@ import math
 import sys
 import os
 
-#seed = int(os.urandom(16).encode('hex'), 16)
-#random.seed(seed)
-random.seed(0)
+seed = int(os.urandom(16).encode('hex'), 16)
+random.seed(seed)
 
 class Cache:
     def __init__(self):
@@ -112,6 +111,13 @@ def compute_video_values(cache_id):
 
     return values
 
+def knapsolve(cache_id):
+    values = compute_video_values(cache_id)
+    items = [(video_id, videosize[video_id], values[video_id]) for video_id in values.iterkeys()]
+    items_to_cache, benefit = knapsack(items, cachesize)
+    videos_to_cache = set(map(itemgetter(0), items_to_cache))
+    return benefit, videos_to_cache
+
 def compute_score():
     score = 0
     for video_id in xrange(nvideos):
@@ -128,18 +134,20 @@ def make_output():
 
 try:
     for iteration in xrange(100):
+
         cache_ids = range(ncaches)
         random.shuffle(cache_ids)
 
+#        if iteration == 0:
+#            pool = Pool()
+#            initial_scores = zip(pool.map(knapsolve, range(ncaches)), range(ncaches))
+#            pool.terminate(); pool.join()
+#            initial_scores.sort(reverse=True)
+#            cache_ids = [cache_id for (_, cache_id) in initial_scores]
+
         for cache_id in cache_ids:
             cache = caches[cache_id]
-
-            values = compute_video_values(cache_id)
-            items = [(video_id, videosize[video_id], values[video_id])
-                    for video_id in values.iterkeys()]
-
-            items_to_cache, benefit = knapsack(items, cachesize)
-            videos_to_cache = set(map(itemgetter(0), items_to_cache))
+            benefit, videos_to_cache = knapsolve(cache_id)
             cache.videos = videos_to_cache
             sys.stderr.write('cache: %d benefit: %d\n' % (cache_id, 1000.0 * benefit / totrequests))
 
@@ -150,4 +158,7 @@ try:
         sys.stderr.write('iteration %d score: %d\n' % (iteration, compute_score()))
 
 except KeyboardInterrupt: pass
-finally: make_output()
+
+make_output()
+sys.stderr.write('seed: %s\n' % seed)
+sys.stderr.write('score: %d\n' % compute_score())
