@@ -3,9 +3,11 @@ from collections import defaultdict
 from operator import itemgetter
 from bisect import insort
 import sys
+import os
 
 import random
-random.seed(0)
+seed = int(os.urandom(16).encode('hex'), 16)
+random.seed(seed)
 
 class Cache:
     def __init__(self):
@@ -58,7 +60,7 @@ for endpoint_id in xrange(nendpoints):
     endpoints.append(endpoint_latencies)
 
 totrequests = 0
-requests = defaultdict(defaultdict(int))
+requests = [[0 for e in xrange(nendpoints)] for v in xrange(nvideos)]
 for r in xrange(type_requests):
     video_id, endpoint_id, numrequests = row(int)
     requests[video_id][endpoint_id] += numrequests
@@ -76,15 +78,16 @@ def compute_video_values(cache_id):
     values = defaultdict(int)
 
     for video_id in xrange(nvideos):
-        if videosize[video_id] > cachesize: continue
         videorequests = requests[video_id]
+        if videosize[video_id] > cachesize: continue
         for endpoint_id in cache.endpoints:
-            numrequests = requests[video_id][endpoint_id]
+            numrequests = videorequests[endpoint_id]
             if not numrequests: continue
             endpoint = endpoints[endpoint_id]
             current_latency = latencies[endpoint_id]
 
             for connected_cache_id, connected_cache_latency in endpoint.iteritems():
+                if cache_id == connected_cache_id: continue
                 if video_id in caches[connected_cache_id].videos:
                     if connected_cache_latency < current_latency:
                         current_latency = connected_cache_latency
@@ -94,25 +97,26 @@ def compute_video_values(cache_id):
 
     return values
 
-for iteration in xrange(10):
-    sys.stderr.write('iteration %d\n' % iteration)
+try:
+    for iteration in xrange(100):
+        sys.stderr.write('iteration %d\n' % iteration)
 
-    cache_ids = range(ncaches)
-    random.shuffle(cache_ids)
+        cache_ids = range(ncaches)
+        random.shuffle(cache_ids)
 
-    for cache_id in cache_ids:
-        cache = caches[cache_id]
-        cache.videos = set()
+        for cache_id in cache_ids:
+            cache = caches[cache_id]
 
-        sys.stderr.write('cache %d\n' % cache_id)
-        values = compute_video_values(cache_id)
-        items = [(video_id, videosize[video_id], values[video_id])
-                for video_id in xrange(nvideos)]
+            sys.stderr.write('cache %d\n' % cache_id)
+            values = compute_video_values(cache_id)
+            items = [(video_id, videosize[video_id], values[video_id])
+                    for video_id in values.iterkeys()]
 
-        items_to_cache, benefit = knapsack(items, cachesize)
-        videos_to_cache = set(map(itemgetter(0), items_to_cache))
-        cache.videos = videos_to_cache
-        sys.stderr.write('benefit: %s\n' % (1000.0 * benefit / totrequests))
+            items_to_cache, benefit = knapsack(items, cachesize)
+            videos_to_cache = set(map(itemgetter(0), items_to_cache))
+            cache.videos = videos_to_cache
+            sys.stderr.write('benefit: %s\n' % (1000.0 * benefit / totrequests))
+except KeyboardInterrupt: pass
 
 
 used_caches = sum(1 for cache in caches if cache.videos)
@@ -121,3 +125,5 @@ print used_caches
 for cache_id, cache in enumerate(caches):
     if cache.videos:
         print cache_id, ' '.join(map(str, cache.videos))
+
+sys.stderr.write('%s\n' % seed)
