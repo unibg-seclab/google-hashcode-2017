@@ -6,8 +6,10 @@ import sys
 import os
 
 import random
-seed = int(os.urandom(16).encode('hex'), 16)
+#seed = int(os.urandom(16).encode('hex'), 16)
+seed = 8410677633984578494805627143684193372
 random.seed(seed)
+maxrand = random.random() * 5
 
 class Cache:
     def __init__(self):
@@ -109,6 +111,7 @@ try:
 
             sys.stderr.write('cache %d\n' % cache_id)
             values = compute_video_values(cache_id)
+            for key in values: values[key] *= (1 + random.random() * maxrand)
             items = [(video_id, videosize[video_id], values[video_id])
                     for video_id in values.iterkeys()]
 
@@ -125,5 +128,3 @@ print used_caches
 for cache_id, cache in enumerate(caches):
     if cache.videos:
         print cache_id, ' '.join(map(str, cache.videos))
-
-sys.stderr.write('%s\n' % seed)
