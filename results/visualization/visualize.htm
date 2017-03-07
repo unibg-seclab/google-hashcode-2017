@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/d3/4.6.0/d3.min.js"></script>
+  <style type="text/css">
+    body {
+      padding: 0;
+      margin: 0;
+    }
+    #wrapper {
+      position: relative;
+      margin: 0;
+      padding: 0;
+    }
+    #canvas {
+      position: relative;
+      width: 100%;
+    }
+    rect.hover {
+      fill: red;
+    }
+    path.hover {
+      stroke-width: 3px;
+      stroke: 'rgba(255, 255, 255, 1.0)';
+    }
+    #tip {
+      position: absolute;
+      width: 100px;
+      height: 20px;
+      display: none;
+      color: white;
+      font-family: monospace;
+      font-size: 10px;
+    }
+    #tip.visible {
+      display: block;
+    }
+    #save {
+      position: absolute;
+      width: 200px;
+      left: 50%;
+      margin-left: -100px;
+      bottom: 50px;
+      border: 0;
+      background-color: rgb(33,150,243);
+      color: #fff;
+      text-transform: uppercase;
+      font-family: Roboto,Helvetica Neue,sans-serif;
+      font-weight: 500;
+      font-size: 12px;
+      visibility: hidden;
+    }
+    #save * {
+      vertical-align: middle;
+    }
+    #save.visible {
+      visibility: visible;
+    }
+    #error {
+      font-family: monospace;
+      text-align: center;
+      padding: 100px 200px 0;
+    }
+    #error.hidden {
+      display: none;
+    }
+    #error p {
+      margin-bottom: 10px;
+    }
+    #error button {
+      border: 0;
+      padding: 10px;
+      background-color: rgb(33,150,243);
+      color: #fff;
+      text-transform: uppercase;
+      font-family: Roboto,Helvetica Neue,sans-serif;
+      font-weight: 500;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrapper"><svg id="canvas"></svg></div>
+  <div id="tip"></div>
+  <button id="save" type="button">
+    <img src="https://www.gstatic.com/images/icons/material/system/1x/share_white_24dp.png" />
+    <span>Save image for sharing</span>
+  </button>
+  <canvas style="display:none"></canvas>
+  <p id="error">Visualization is loading...</p>
+<script>
+
+function visualize(data, width, height, visualizeLargeSets) {
+  // Dear Hash Code participant,
+  // Thank you for checking out our visualization code!
+  // However, please, don't forget to focus on optimizing your solution.
+  // Let the best team win!
+  visualizeLargeSets = visualizeLargeSets || false;
+
+  d3.select("svg").selectAll("*").remove();
+  var numLinks = 0;
+  for (var i = 0; i < data['endpoints'].length; i++) {
+    numLinks += data['endpoints'][i]['links'].length;
+  }
+
+  if (numLinks > 2500 && !visualizeLargeSets) {
+    var svg = d3.select('#canvas').style('height', '0px')
+    d3.select('#save').classed('visible', false);
+
+    var error = document.getElementById('error');
+    error.className = '';
+    error.innerHTML =
+      '<p>This data set is very large. ' +
+      'Visualizing it may slow down your computer ' +
+      '(although the result will be b-e-a-u-t-i-f-u-l). ' +
+      'Click the button below to proceed.</p>'
+    var button = document.createElement('button');
+    error.appendChild(button);
+    button.type = 'button';
+    button.innerHTML = 'I accept the risk!';
+    button.onclick = function() {
+      visualize(data, width, height, true);
+    }
+    return;
+  }
+
+  function color(ratio) {
+    return 'hsla(' + Math.round(ratio * 100) + ', 100%, 50%, 0.3)';
+  }
+
+  var canvasHeight = height - 10;
+
+  var cacheRadius = 4;
+  var endpointRadius = 1;
+
+  var marginLeft = 20;
+  var marginTop = 80;
+  var horizontalMargin = 120;
+  var verticalMargin = 120;
+
+  var cachesOffset = 100;
+
+  var canvas = document.getElementById('canvas');
+  var tip = document.getElementById('tip');
+
+  var canvasWidth = canvas.parentElement.offsetWidth;
+  var barWidth = horizontalMargin - marginLeft - 20;
+  var barHeight = 10;
+
+  var svg = d3.select('#canvas')
+    .style('width', '100%')
+    .style('height', canvasHeight + 'px')
+    .style('background', 'rgb(58, 58, 58)');
+
+  function makeLabel(svg, text) {
+    return svg.append('text')
+      .text(text)
+      .style('font-family', 'monospace')
+      .style('font-size', '10px')
+      .style('stroke', '#fff');
+  }
+
+  makeLabel(svg, 'Hit ratio')
+    .attr('x', marginLeft)
+    .attr('y', marginTop);
+
+  makeLabel(svg, 'Endpoints')
+    .attr('x', horizontalMargin - endpointRadius)
+    .attr('y', marginTop);
+
+  makeLabel(svg, 'Data center')
+    .attr('x', canvasWidth - horizontalMargin)
+    .attr('y', marginTop);
+
+  makeLabel(svg, 'Caches')
+    .attr('x', canvasWidth - horizontalMargin)
+    .attr('y', marginTop + cachesOffset);
+
+  var endpoints = data['endpoints'];
+  var caches = data['caches'];
+
+  for (var i = 0; i < endpoints.length; i++) {
+    var endpoint = endpoints[i];
+    endpoint.x = horizontalMargin;
+    endpoint.y = verticalMargin + (canvasHeight - verticalMargin * 2) / endpoints.length * i;
+    endpoint.hitRatio = endpoint.requests > 0 ? endpoint.hits / endpoint.requests : 0;
+  }
+
+  var cacheX = canvasWidth - horizontalMargin;
+  for (var i = 0; i < caches.length; i++) {
+    caches[i].x = cacheX;
+    caches[i].y = verticalMargin + cachesOffset +
+      (canvasHeight - cachesOffset - verticalMargin * 2) / caches.length * i;
+  }
+  var datacenter = {
+    x: cacheX,
+    y: verticalMargin,
+    lines: []
+  };
+
+  svg.append('rect')
+    .attr('x', datacenter.x - cacheRadius)
+    .attr('y', datacenter.y - cacheRadius)
+    .attr('width', cacheRadius * 4)
+    .attr('height', cacheRadius * 4)
+    .attr('fill', color(0));
+
+  svg.selectAll('circle').data(endpoints).enter().append('circle')
+    .attr('cx', function(d, i) { return d.x; })
+    .attr('cy', function(d, i) { return d.y; })
+    .attr('fill', 'rgb(240, 228, 91)')
+    .attr('stroke', 'rgb(240, 228, 91)')
+    .attr('r', 1)  // Starting width.
+    .transition().duration(2000)
+    .attr('r', endpointRadius);
+
+  svg.selectAll('.endpoints').data(endpoints).enter().append('rect')
+    .attr('x', function(d, i) { return marginLeft; })
+    .attr('y', function(d, i) { return d.y - barHeight / 2; })
+    .attr('fill', function(d) { return color(d.hitRatio); })
+    .attr('stroke', function(d) { return color(d.hitRatio); })
+    .attr('width', 1)
+    .attr('height', barHeight)
+    .on('mouseover', function(d) {
+      var textWidth = 30;
+      var textHeight = 10;
+      tip.style.left = (d.x - textWidth) + 'px';
+      tip.style.top = (d.y - textHeight / 2) + 'px';
+      tip.innerHTML = Math.round(d.hitRatio * 100) + '%';
+      tip.className = 'visible';
+    })
+    .on('mouseout', function(d) {
+      tip.className = '';
+    })
+    .transition().duration(2000)
+    .attr('width', function(d) { return d.hitRatio * barWidth + 1; });
+
+  var lines = [];
+  for (var i = 0; i < endpoints.length; i++) {
+    var endpoint = endpoints[i];
+    var links = endpoint['links'];
+    for (var j = 0; j < links.length; j++) {
+      var link = links[j];
+      var cacheIndex = link['cacheIndex'];
+      var cache = datacenter;
+      if (cacheIndex >= 0) {
+        cache = caches[cacheIndex];
+      }
+      if (!('lines' in cache)) {
+        cache.lines = [];
+      }
+      var quality = link['score'];
+      var line = {
+        endpoint: i,
+        cache: link['cacheIndex'],
+        x1: endpoint.x,
+        y1: endpoint.y,
+        x2: cache.x,
+        y2: cache.y + cacheRadius,
+        color: color(quality)
+      };
+      lines.push(line);
+      cache.lines.push(line);
+    }
+  }
+
+  function curveStart(d) {
+    path = 'M' + d.x1 + ',' + d.y1
+         + 'C' + (d.x1 + d.x1) / 2 + ',' + d.y1
+         + ' ' + (d.x1 + d.x1) / 2 + ',' + d.y1
+         + ' ' + d.x1 + ',' + d.y1;
+    return path;
+  }
+
+  function curve(d) {
+    path = 'M' + d.x1 + ',' + d.y1
+         + 'C' + (d.x1 + d.x2) / 2 + ',' + d.y1
+         + ' ' + (d.x1 + d.x2) / 2 + ',' + d.y2
+         + ' ' + d.x2 + ',' + d.y2;
+    return path;
+  }
+
+  svg.selectAll('path').data(lines).enter().append('path')
+    .attr('d', curveStart)
+    .attr('fill', 'none')
+    .style('stroke', function(d) { return d.color; })
+    .attr('class', function(d) { return 'cache-' + d.cache + ' endpoint-' + d.endpoint })
+    .transition().delay(500).duration(1500)
+    .attr('d', curve)
+
+  svg.selectAll('.rect').data(caches).enter().append('rect')
+    .on('mouseover', function(d) {
+      d3.select(this)
+        .classed('hover', true);
+      d3.selectAll('.cache-' + d.index)
+        .classed('hover', true);
+
+      tip.style.left = d.x + cacheRadius * 2 + 10 + 'px';
+      tip.style.top = d.y + 'px';
+      tip.innerHTML = 'Cache #' + d.index + '<br>Used: ' + d.used + ' MB' +
+        ' / ' + data['cacheSize'] + ' MB';
+      tip.className = 'visible';
+    })
+    .on('mouseout', function(d) {
+      d3.select(this)
+        .classed('hover', false);
+      d3.selectAll('.cache-' + d.index)
+        .classed('hover', false);
+      tip.className = '';
+    })
+    .attr('x', function(d, i) { return d.x; })
+    .attr('y', function(d, i) { return d.y; })
+    .attr('fill', function(d) { return color(d.used / data['cacheSize']); })
+    .attr('width', 1)
+    .attr('height', 1)
+    .transition().duration(2000)
+    .attr('width', function(d) { return cacheRadius * 2 })
+    .attr('height', function(d) { return cacheRadius * 2 });
+
+    var imgWidth = 362;
+    var imgHeight = 76;
+    svg.append('text')
+      .attr('width', imgWidth)
+      .attr('height', imgHeight)
+      .attr('x', marginLeft)
+      .attr('y', canvasHeight - imgHeight)
+      .text('#hashcode2017')
+      .style('stroke', 'rgb(100, 100, 100)')
+      .style('fill', 'rgb(100, 100, 100)')
+      .style('font-family', 'monospace')
+      .style('font-size', '36px');
+
+    d3.select('#save').on('click', function() {
+      var html = svg.attr('version', 1.1)
+        .attr('xmlns', 'http://www.w3.org/2000/svg')
+        .node().parentNode.innerHTML;
+
+      var src = 'data:image/svg+xml;base64,' + btoa(html);
+      var img = '<img src="' + src + '">';
+      d3.select('#image-data').html(img);
+
+      var canvasElement = document.querySelector('canvas');
+      canvasElement.width = canvasWidth;
+      canvasElement.height = canvasHeight;
+      var context = canvasElement.getContext('2d');
+
+      var image = new Image;
+      image.src = src;
+      image.onload = function() {
+        context.drawImage(image, 0, 0);
+        var canvasData = canvasElement.toDataURL('image/png');
+        var imgElement = '<img src="' + canvasData + '">';
+        d3.select('#image-data').html(imgElement);
+        var link = document.createElement('a');
+        link.download = 'hashcode.png';
+        link.href = canvasData;
+        link.click();
+      };
+    })
+    .classed('visible', true);
+
+    document.getElementById('error').className = 'hidden';
+}
+
+var request = new XMLHttpRequest();
+//request.open('GET', '/download/' + decodeURIComponent(location.search.split('blobId=')[1]), true);
+request.open('GET', '/blobs/' + decodeURIComponent(location.search.split('id=')[1]), true);
+
+request.onload = function() {
+  if (request.status >= 200 && request.status < 400) {
+    // Success!
+    var data = JSON.parse(request.responseText);
+    visualize(data, window.innerWidth, window.innerHeight);
+    window.onresize = function(event) {
+      visualize(data, window.innerWidth, window.innerHeight);
+    }
+  } else {
+    document.getElementById('error').textContent = 'request failed: ' + request.status;
+  }
+};
+
+request.onerror = function() {
+  // There was a connection error of some sort
+};
+
+request.send();
+</script>
+</body>
+</html>
